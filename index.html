@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus Escolar 3D - Comedor Fotovoltaico & Cancha Deportiva</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      overflow: hidden;
+      background: #0b0f19;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #f8fafc;
+    }
+    #canvas3d {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    /* HUD de Exposición */
+    #hud-panel {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      width: 350px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
+      z-index: 10;
+    }
+
+    .pill-tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 3px 9px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    p.sub {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      line-height: 1.35;
+      margin-bottom: 12px;
+    }
+
+    /* Control Solar Dinámico */
+    .solar-slider-box {
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    .time-badge {
+      background: #f59e0b;
+      color: #0f172a;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: #f59e0b;
+      cursor: pointer;
+    }
+
+    .solar-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 0.7rem;
+    }
+
+    .metric-pill {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .metric-pill b { display: block; font-size: 0.88rem; color: #38bdf8; }
+
+    /* Botones de Navegación */
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .nav-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-btn:hover {
+      background: #0284c7;
+      border-color: #38bdf8;
+      transform: translateX(4px);
+    }
+
+    .nav-btn.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      font-weight: 700;
+    }
+
+    /* Ficha Técnica */
+    #detail-card {
+      background: rgba(30, 41, 59, 0.7);
+      border-left: 3px solid #38bdf8;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      color: #cbd5e1;
+    }
+    #detail-card strong { color: #38bdf8; display: block; margin-bottom: 3px; font-size: 0.82rem; }
+
+    #tip-controls {
+      position: absolute;
+      bottom: 16px;
+      right: 18px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.73rem;
+      color: #94a3b8;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+</head>
+<body>
+
+  <div id="hud-panel">
+    <span class="pill-tag">Campus Universitario 3D</span>
+    <h1>Comedor Fotovoltaico</h1>
+    <p class="sub">Integración arquitectónica: plaza escolar con pasto, arbolado y cancha deportiva contigua.</p>
+
+    <!-- CONTROL SOLAR -->
+    <div class="solar-slider-box">
+      <div class="slider-header">
+        <span>☀️ Simulación Solar:</span>
+        <span class="time-badge" id="time-display">12:30 hrs</span>
+      </div>
+      <input type="range" id="solar-time" min="7" max="19" step="0.25" value="12.5" oninput="updateSunPosition()">
+      <div class="solar-metrics">
+        <div class="metric-pill">Potencia Generada: <b id="power-calc">1,180 W</b></div>
+        <div class="metric-pill">Eficiencia MPPT: <b id="eff-calc">98.3 %</b></div>
+      </div>
+    </div>
+
+    <!-- BOTONES DE VISTAS -->
+    <div class="nav-list">
+      <button class="nav-btn active" onclick="navigate(0)">📐 Vista Frontal Alzada <span>Comedor</span></button>
+      <button class="nav-btn" onclick="navigate(1)">🏀 Cancha & Patio Escolar <span>Deportes</span></button>
+      <button class="nav-btn" onclick="navigate(2)">☀️ Techo Solar 15° <span>1200W</span></button>
+      <button class="nav-btn" onclick="navigate(3)">🔌 Estación Enchufes/USB <span>4AC / 8USB</span></button>
+      <button class="nav-btn" onclick="navigate(4)">👥 Zona de Alumnos & Laptops <span>6+ Plazas</span></button>
+      <button class="nav-btn" onclick="navigate(5)">🔄 Vista General Campus <span>360°</span></button>
+    </div>
+
+    <div id="detail-card">
+      <strong id="card-title">Alzado Central - Comedor Solar</strong>
+      <span id="card-desc">Ubicación estratégica en el patio central rodeado de áreas verdes de descanso y junto a las canchas deportivas.</span>
+    </div>
+  </div>
+
+  <div id="tip-controls">🖱️ May x MRX</div>
+  <canvas id="canvas3d"></canvas>
+
+  <script>
+    // -------------------------------------------------------------
+    // 1. ESCENA, CÁMARA Y RENDERER
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('canvas3d');
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 140);
+    camera.position.set(0, 2.2, 5.2);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    const controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.target.set(0, 1.4, 0);
+
+    // -------------------------------------------------------------
+    // 2. DISPOSICIÓN SOLAR
+    // -------------------------------------------------------------
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x4a5d23, 0.7);
+    scene.add(hemiLight);
+
+    const sun = new THREE.DirectionalLight(0xfff6e5, 1.45);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 50;
+    sun.shadow.camera.left = -12;
+    sun.shadow.camera.right = 12;
+    sun.shadow.camera.top = 12;
+    sun.shadow.camera.bottom = -12;
+    sun.shadow.bias = -0.0003;
+    scene.add(sun);
+
+    const sunMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.6, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff0aa })
+    );
+    scene.add(sunMesh);
+
+    function updateSunPosition() {
+      const hour = parseFloat(document.getElementById('solar-time').value);
+      const hInt = Math.floor(hour);
+      const mInt = Math.round((hour - hInt) * 60);
+      document.getElementById('time-display').textContent = `${hInt.toString().padStart(2, '0')}:${mInt.toString().padStart(2, '0')} hrs`;
+
+      const progress = (hour - 7) / (19 - 7);
+      const sunAngle = progress * Math.PI;
+
+      const radius = 26;
+      const sunX = -Math.cos(sunAngle) * radius;
+      const sunY = Math.sin(sunAngle) * radius;
+      const sunZ = 8 + Math.cos(sunAngle) * 4;
+
+      sun.position.set(sunX, Math.max(sunY, 2.0), sunZ);
+      sunMesh.position.copy(sun.position);
+
+      if (hour < 9 || hour > 17) {
+        scene.background = new THREE.Color(0xf3caa9);
+        sun.color.setHex(0xffaa55);
+      } else {
+        scene.background = new THREE.Color(0xd7e6f3);
+        sun.color.setHex(0xfffaee);
+      }
+
+      const efficiency = Math.sin(sunAngle);
+      const watts = Math.round(1200 * Math.max(0, efficiency));
+      const effPercent = (Math.max(0, efficiency) * 100).toFixed(1);
+      document.getElementById('power-calc').textContent = `${watts.toLocaleString()} W`;
+      document.getElementById('eff-calc').textContent = `${effPercent} %`;
+    }
+
+    // -------------------------------------------------------------
+    // 3. GENERACIÓN DE TEXTURAS (PASTO, ADOQUÍN, CANCHA, PANELES)
+    // -------------------------------------------------------------
+    // Pasto natural con ruido verde
+    function makeGrassTexture() {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 512;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#4d7c2a'; // Base verde zacate
+      c.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 45000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        c.fillStyle = Math.random() > 0.5 ? '#5f9e34' : '#3e6321';
+        c.fillRect(x, y, 2, 3);
+      }
+      const tex = new THREE.CanvasTexture(cv);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(8, 8);
+      return tex;
+    }
+
+    // Adoquines de plaza escolar
+    function makePaverTexture() {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 512;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#b0b7c3';
+      c.fillRect(0, 0, 512, 512);
+      c.strokeStyle = '#8c95a6';
+      c.lineWidth = 4;
+      const size = 64;
+      for (let x = 0; x < 512; x += size) {
+        for (let y = 0; y < 512; y += size) {
+          c.strokeRect(x, y, size, size);
+          c.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)';
+          c.fillRect(x + 2, y + 2, size - 4, size - 4);
+        }
+      }
+      const tex = new THREE.CanvasTexture(cv);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(6, 6);
+      return tex;
+    }
+
+    // Cancha deportiva (Piso acrílico con líneas)
+    function makeCourtTexture() {
+      const cv = document.createElement('canvas');
+      cv.width = 1024; cv.height = 512;
+      const c = cv.getContext('2d');
+      // Fondo azul deportivo
+      c.fillStyle = '#1e40af';
+      c.fillRect(0, 0, 1024, 512);
+      // Área de juego verde
+      c.fillStyle = '#15803d';
+      c.fillRect(40, 30, 944, 452);
+
+      // Líneas reglamentarias blancas
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 8;
+      // Perímetro
+      c.strokeRect(50, 40, 924, 432);
+      // Media cancha
+      c.beginPath();
+      c.moveTo(512, 40);
+      c.lineTo(512, 472);
+      c.stroke();
+      // Círculo central
+      c.beginPath();
+      c.arc(512, 256, 70, 0, Math.PI * 2);
+      c.stroke();
+      // Áreas de 3 puntos
+      c.beginPath();
+      c.arc(50, 256, 120, -Math.PI / 2, Math.PI / 2);
+      c.stroke();
+      c.beginPath();
+      c.arc(974, 256, 120, Math.PI / 2, -Math.PI / 2);
+      c.stroke();
+
+      return new THREE.CanvasTexture(cv);
+    }
+
+    // Silicio de paneles solares
+    function makeSolarTexture() {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 512;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#0a1d37';
+      c.fillRect(0, 0, 512, 512);
+      const cellW = 512 / 4;
+      const cellH = 512 / 6;
+      for (let x = 0; x < 4; x++) {
+        for (let y = 0; y < 6; y++) {
+          c.strokeStyle = '#1e3a5f';
+          c.lineWidth = 2;
+          c.strokeRect(x * cellW + 2, y * cellH + 2, cellW - 4, cellH - 4);
+          c.strokeStyle = '#93c5fd';
+          c.lineWidth = 1;
+          c.beginPath();
+          c.moveTo(x * cellW + cellW * 0.33, y * cellH + 2);
+          c.lineTo(x * cellW + cellW * 0.33, (y + 1) * cellH - 2);
+          c.moveTo(x * cellW + cellW * 0.66, y * cellH + 2);
+          c.lineTo(x * cellW + cellW * 0.66, (y + 1) * cellH - 2);
+          c.stroke();
+        }
+      }
+      return new THREE.CanvasTexture(cv);
+    }
+
+    function makePineTexture() {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 512;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#c58e5a';
+      c.fillRect(0, 0, 512, 512);
+      c.strokeStyle = 'rgba(100, 55, 20, 0.2)';
+      for (let i = 0; i < 512; i += 4) {
+        c.lineWidth = Math.random() * 2 + 1;
+        c.beginPath();
+        c.moveTo(0, i);
+        c.lineTo(512, i + (Math.random() * 6 - 3));
+        c.stroke();
+      }
+      return new THREE.CanvasTexture(cv);
+    }
+
+    // Materiales PBR
+    const matGrass = new THREE.MeshStandardMaterial({ map: makeGrassTexture(), roughness: 0.9 });
+    const matPavers = new THREE.MeshStandardMaterial({ map: makePaverTexture(), roughness: 0.8 });
+    const matCourt = new THREE.MeshStandardMaterial({ map: makeCourtTexture(), roughness: 0.45 });
+    const matConcrete = new THREE.MeshStandardMaterial({ color: 0xd6d3d1, roughness: 0.85 });
+    const matWoodPlank = new THREE.MeshStandardMaterial({ map: makePineTexture(), roughness: 0.5, metalness: 0.05 });
+    const matPTRDark = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.75, roughness: 0.35 });
+    const matAluminum = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
+    const matSolar = new THREE.MeshStandardMaterial({ map: makeSolarTexture(), metalness: 0.85, roughness: 0.15 });
+    const matConduit = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+    const matWhiteBox = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+    const matPoloGreen = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.75 });
+    const matSkin = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
+    const matScreenActive = new THREE.MeshBasicMaterial({ color: 0x60a5fa });
+
+    // -------------------------------------------------------------
+    // 4. ENTORNO ARQUITECTÓNICO COMPLETO: PASTOS, CANCHA Y PLAZA
+    // -------------------------------------------------------------
+    const envGroup = new THREE.Group();
+    scene.add(envGroup);
+
+    // 1. TERRENO BASE CON PASTO GENERAL (70m x 70m)
+    const bigGrass = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), matGrass);
+    bigGrass.rotation.x = -Math.PI / 2;
+    bigGrass.receiveShadow = true;
+    envGroup.add(bigGrass);
+
+    // 2. PLAZOLETA DE ADOQUÍN CENTRAL DONDE ESTÁ EL COMEDOR
+    const plazaPave = new THREE.Mesh(new THREE.BoxGeometry(10, 0.04, 10), matPavers);
+    plazaPave.position.set(0, 0.02, 0);
+    plazaPave.receiveShadow = true;
+    envGroup.add(plazaPave);
+
+    // Guarnición de concreto alrededor de la plazoleta
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(10.3, 0.06, 10.3), matConcrete);
+    curb.position.set(0, 0.01, 0);
+    envGroup.add(curb);
+
+    // Andador peatonal hacia la escuela
+    const pathWalk = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.03, 8), matPavers);
+    pathWalk.position.set(0, 0.02, -5);
+    pathWalk.receiveShadow = true;
+    envGroup.add(pathWalk);
+
+    // 3. CANCHA DEPORTIVA AL LADO DERECHO (X = +13m)
+    const courtGroup = new THREE.Group();
+    courtGroup.position.set(13.5, 0.03, 0);
+
+    const courtFloor = new THREE.Mesh(new THREE.BoxGeometry(14, 0.05, 8), matCourt);
+    courtFloor.receiveShadow = true;
+    courtGroup.add(courtFloor);
+
+    // Tableros y canastas de básquetbol en los dos extremos de la cancha
+    [-6.8, 6.8].forEach(xPole => {
+      const bPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.8, 12), matPTRDark);
+      bPost.position.set(xPole, 1.9, 0);
+      bPost.castShadow = true;
+      courtGroup.add(bPost);
+
+      // Tablero blanco
+      const bBoard = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 1.2), matWhiteBox);
+      bBoard.position.set(xPole + (xPole > 0 ? -0.2 : 0.2), 3.1, 0);
+      courtGroup.add(bBoard);
+
+      // Aro naranja
+      const bRing = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.018, 8, 16), new THREE.MeshBasicMaterial({ color: 0xea580c }));
+      bRing.rotation.x = Math.PI / 2;
+      bRing.position.set(xPole + (xPole > 0 ? -0.45 : 0.45), 2.8, 0);
+      courtGroup.add(bRing);
+    });
+    envGroup.add(courtGroup);
+
+    // 4. EDIFICIO AL FONDO
+    const facade = new THREE.Mesh(new THREE.BoxGeometry(36, 9, 0.5), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.9 }));
+    facade.position.set(0, 4.5, -9.0);
+    facade.receiveShadow = true;
+    envGroup.add(facade);
+
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(36.2, 0.4, 0.6), new THREE.MeshStandardMaterial({ color: 0x991b1b }));
+    trim.position.set(0, 9.1, -9.0);
+    envGroup.add(trim);
+
+    // Letrero Institucional
+    const cvSign = document.createElement('canvas');
+    cvSign.width = 1536; cvSign.height = 160;
+    const sCtx = cvSign.getContext('2d');
+    sCtx.fillStyle = '#ffffff';
+    sCtx.fillRect(0, 0, 1536, 160);
+    sCtx.fillStyle = '#1e3a5f';
+    sCtx.font = 'bold 58px sans-serif';
+    sCtx.textAlign = 'center';
+    sCtx.fillText('INSTITUTO TECNOLÓGICO SUPERIOR', 768, 100);
+    const signTex = new THREE.CanvasTexture(cvSign);
+    const signMesh = new THREE.Mesh(new THREE.BoxGeometry(14, 1.2, 0.06), new THREE.MeshStandardMaterial({ map: signTex }));
+    signMesh.position.set(0, 7.6, -8.72);
+    envGroup.add(signMesh);
+
+    // Puerta y ventanas
+    const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.8, 0.08), new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+    door.position.set(0, 1.9, -8.72);
+    envGroup.add(door);
+
+    [-8.5, 8.5].forEach(xWin => {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(5.2, 2.5, 0.08), new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7 }));
+      win.position.set(xWin, 4.2, -8.72);
+      envGroup.add(win);
+    });
+
+    // 5. ÁRBOLES Y VEGETACIÓN QUE DAN VIDA AL PASTO
+    function makeTree(x, z, scale = 1) {
+      const tree = new THREE.Group();
+      tree.position.set(x, 0, z);
+      tree.scale.set(scale, scale, scale);
+
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.26, 3.2, 8), new THREE.MeshStandardMaterial({ color: 0x451a03 }));
+      trunk.position.y = 1.6;
+      trunk.castShadow = true;
+      tree.add(trunk);
+
+      // Copa de hojas frondosa
+      const foliage1 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.6, 1), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.85 }));
+      foliage1.position.y = 3.8;
+      foliage1.castShadow = true;
+      tree.add(foliage1);
+
+      const foliage2 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2, 1), new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.85 }));
+      foliage2.position.set(0.4, 4.7, 0.2);
+      foliage2.castShadow = true;
+      tree.add(foliage2);
+
+      scene.add(tree);
+    }
+    // Arbolado en los costados y áreas de pasto
+    makeTree(-7.5, -1.0, 1.1);
+    makeTree(-7.0, 3.5, 0.95);
+    makeTree(-5.5, -5.0, 1.2);
+    makeTree(5.5, -5.0, 1.15);
+    makeTree(13.5, 5.5, 1.0);
+
+    // Macetones de barro en las esquinas de la plazoleta
+    function makePot(x, z) {
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.25, 0.55, 16), new THREE.MeshStandardMaterial({ color: 0xb45309 }));
+      pot.position.set(x, 0.275, z);
+      pot.castShadow = true;
+      const foliage = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 1), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.8 }));
+      foliage.position.set(x, 0.72, z);
+      foliage.castShadow = true;
+      scene.add(pot);
+      scene.add(foliage);
+    }
+    makePot(-3.5, 3.5);
+    makePot(3.5, 3.5);
+    makePot(-3.5, -3.5);
+    makePot(3.5, -3.5);
+
+    // -------------------------------------------------------------
+    // 5. COMEDOR SOLAR DETALLADO (ALZADO CENTRAL 1:1)
+    // -------------------------------------------------------------
+    const comedor = new THREE.Group();
+    scene.add(comedor);
+
+    // Zapata de hormigón armado (2.8m x 2.0m x 0.15m)
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.15, 2.0), matConcrete);
+    slab.position.y = 0.075;
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    comedor.add(slab);
+
+    // Columna central de hormigón estilizada (0.42m x 0.42m x 2.4m)
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.42, 2.4, 0.42), matConcrete);
+    col.position.y = 1.2;
+    col.castShadow = true;
+    col.receiveShadow = true;
+    comedor.add(col);
+
+    const colPlate = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.02, 0.52), matPTRDark);
+    colPlate.position.y = 0.16;
+    comedor.add(colPlate);
+
+    // MESA DE MADERA (a 0.75m de altura)
+    const tableGroup = new THREE.Group();
+    tableGroup.position.y = 0.75;
+    [-0.32, 0, 0.32].forEach(xP => {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.045, 1.95), matWoodPlank);
+      p.position.x = xP;
+      p.castShadow = true;
+      p.receiveShadow = true;
+      tableGroup.add(p);
+    });
+    const tFrame = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.04, 1.9), matPTRDark);
+    tFrame.position.y = -0.04;
+    tableGroup.add(tFrame);
+    comedor.add(tableGroup);
+
+    // BANCAS DE MADERA (a 0.45m de altura)
+    [-0.82, 0.82].forEach(sideX => {
+      const bGroup = new THREE.Group();
+      bGroup.position.set(sideX, 0.45, 0);
+      [-0.1, 0.1].forEach(off => {
+        const bp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 1.95), matWoodPlank);
+        bp.position.x = off;
+        bp.castShadow = true;
+        bGroup.add(bp);
+      });
+      [-0.7, 0.7].forEach(zL => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.06), matPTRDark);
+        leg.position.set(0, -0.22, zL);
+        leg.castShadow = true;
+        bGroup.add(leg);
+      });
+      comedor.add(bGroup);
+    });
+
+    // --- TECHO SOLAR A 2 AGUAS (15°) CON CERCHAS ESBELTAS Y DUELA DE MADERA ---
+    const roof = new THREE.Group();
+    roof.position.y = 2.4;
+    comedor.add(roof);
+
+    const pitchRad = 15 * (Math.PI / 180);
+
+    // Cerchas Pratt ligeras
+    [-0.95, 0.95].forEach(zTruss => {
+      const truss = new THREE.Group();
+      truss.position.z = zTruss;
+
+      const chord = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.04, 0.04), matPTRDark);
+      truss.add(chord);
+
+      const kingPost = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.28, 0.04), matPTRDark);
+      kingPost.position.y = 0.14;
+      truss.add(kingPost);
+
+      [-1, 1].forEach(side => {
+        const rafter = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.04, 0.04), matPTRDark);
+        rafter.position.set(side * 0.5, 0.135, 0);
+        rafter.rotation.z = -side * pitchRad;
+        truss.add(rafter);
+
+        const strut = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.03, 0.03), matPTRDark);
+        strut.position.set(side * 0.45, 0.07, 0);
+        strut.rotation.z = side * 0.4;
+        truss.add(strut);
+      });
+      roof.add(truss);
+    });
+
+    // Alas con duela de madera y 8 paneles monocristalinos
+    [-1, 1].forEach(side => {
+      const wing = new THREE.Group();
+      wing.position.x = side * 0.82;
+      wing.rotation.z = -side * pitchRad;
+
+      const woodDeck = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.02, 1.95), matWoodPlank);
+      woodDeck.position.y = 0.01;
+      woodDeck.castShadow = true;
+      wing.add(woodDeck);
+
+      [-0.48, 0.48].forEach(zR => {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.025, 0.03), matAluminum);
+        rail.position.set(0, 0.03, zR);
+        wing.add(rail);
+      });
+
+      for (let i = -1; i <= 1; i += 2) {
+        for (let j = -1; j <= 1; j += 2) {
+          const pGroup = new THREE.Group();
+          pGroup.position.set(i * 0.41, 0.045, j * 0.48);
+
+          const frame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.025, 0.92), matAluminum);
+          frame.castShadow = true;
+          pGroup.add(frame);
+
+          const cell = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.005, 0.88), matSolar);
+          cell.position.y = 0.013;
+          pGroup.add(cell);
+
+          wing.add(pGroup);
+        }
+      }
+      roof.add(wing);
+    });
+
+    // Lámparas LED lineales
+    [-0.38, 0.38].forEach(xLed => {
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.015, 1.6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      led.position.set(xLed, -0.015, 0);
+      roof.add(led);
+    });
+
+    // Router WiFi blanco superior
+    const routerBox = new THREE.Group();
+    routerBox.position.set(0, 2.1, 0.24);
+    const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.28, 0.09), matWhiteBox);
+    rBody.castShadow = true;
+    routerBox.add(rBody);
+
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.42), matPTRDark);
+    antenna.position.set(0.06, 0.32, 0);
+    routerBox.add(antenna);
+
+    const statusLed = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 8), new THREE.MeshBasicMaterial({ color: 0x22c55e }));
+    statusLed.position.set(0, -0.08, 0.05);
+    routerBox.add(statusLed);
+    comedor.add(routerBox);
+
+    // Tubería conduit
+    const conduit = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.65), matConduit);
+    conduit.position.set(0, 2.45, 0.24);
+    comedor.add(conduit);
+
+    // Gabinete lateral MPPT
+    const mpptGroup = new THREE.Group();
+    mpptGroup.position.set(-0.23, 1.8, 0);
+    const mBox = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.42, 0.32), matPTRDark);
+    mBox.castShadow = true;
+    mpptGroup.add(mBox);
+    const lcd = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.08, 0.12), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+    lcd.position.set(-0.075, 0.1, 0);
+    mpptGroup.add(lcd);
+    comedor.add(mpptGroup);
+
+    // Contactos frontales
+    const outletGroup = new THREE.Group();
+    outletGroup.position.set(0.22, 0.95, 0);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.26, 0.2), matWhiteBox);
+    outletGroup.add(plate);
+    for (let r = -1; r <= 1; r += 2) {
+      for (let c = -1; c <= 1; c += 2) {
+        const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.005, 16), matPTRDark);
+        sock.rotation.z = Math.PI / 2;
+        sock.position.set(0.01, r * 0.065, c * 0.05);
+        outletGroup.add(sock);
+      }
+    }
+    comedor.add(outletGroup);
+
+    // --- ESTUDIANTES CON LAPTOPS ---
+    function makeStudent(x, z, rotY) {
+      const st = new THREE.Group();
+      st.position.set(x, 0, z);
+      st.rotation.y = rotY;
+
+      const thighs = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.36), matPTRDark);
+      thighs.position.set(0, 0.45, 0.16);
+      st.add(thighs);
+      const shins = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.42, 0.12), matPTRDark);
+      shins.position.set(0, 0.21, 0.32);
+      st.add(shins);
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.2), matPoloGreen);
+      torso.position.y = 0.69;
+      torso.castShadow = true;
+      st.add(torso);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), matSkin);
+      head.position.y = 0.96;
+      head.castShadow = true;
+      st.add(head);
+
+      const arms = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.24), matPoloGreen);
+      arms.position.set(0, 0.76, 0.15);
+      st.add(arms);
+
+      const lap = new THREE.Group();
+      lap.position.set(0, 0.78, 0.3);
+      const lBase = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.012, 0.16), matAluminum);
+      lap.add(lBase);
+      const lScreen = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.01), matScreenActive);
+      lScreen.position.set(0, 0.08, 0.08);
+      lScreen.rotation.x = -0.28;
+      lap.add(lScreen);
+      st.add(lap);
+
+      return st;
+    }
+
+    comedor.add(makeStudent(-0.82, -0.45, Math.PI / 2));
+    comedor.add(makeStudent(-0.82, 0.45, Math.PI / 2));
+    comedor.add(makeStudent(0.82, -0.45, -Math.PI / 2));
+    comedor.add(makeStudent(0.82, 0.45, -Math.PI / 2));
+
+    // -------------------------------------------------------------
+    // 6. NAVEGACIÓN Y CÁMARAS PARA LA EXPOSICIÓN
+    // -------------------------------------------------------------
+    const views = [
+      {
+        cam: { x: 0, y: 1.95, z: 4.8 },
+        target: { x: 0, y: 1.4, z: 0 },
+        title: "Alzado Central - Comedor Solar",
+        desc: "Cerchas esbeltas de acero PTR 2x2 a 15°, techo con duela de madera de pino y adoquín en la plazoleta."
+      },
+      {
+        cam: { x: 14.5, y: 6.5, z: 10.5 },
+        target: { x: 6.0, y: 1.0, z: 0 },
+        title: "Cancha Deportiva & Campus Escolar",
+        desc: "Cancha de básquetbol y usos múltiples contigua al comedor, rodeada de áreas verdes con pasto y árboles de sombra."
+      },
+      {
+        cam: { x: 0, y: 3.5, z: 3.2 },
+        target: { x: 0, y: 2.2, z: 0 },
+        title: "Techo Solar (8 Paneles / 1200W)",
+        desc: "8 paneles monocristalinos orientados este-oeste para recibir insolación continua con marcos de aluminio anodizado."
+      },
+      {
+        cam: { x: 0.95, y: 1.15, z: 0.7 },
+        target: { x: 0.22, y: 0.95, z: 0 },
+        title: "Estación de Contactos & USB",
+        desc: "Panel frontal con 4 contactos 110V/220V universales y 8 puertos USB con protección termomagnética a nivel de mesa."
+      },
+      {
+        cam: { x: -1.9, y: 1.35, z: 1.6 },
+        target: { x: -0.5, y: 0.72, z: 0 },
+        title: "Zona de Alumnos con Laptops",
+        desc: "Estudiantes sentados cómodamente en bancas de pino tratado mientras trabajan conectados a la energía solar."
+      },
+      {
+        cam: { x: 9.5, y: 7.2, z: 11.5 },
+        target: { x: 1.5, y: 1.0, z: 0 },
+        title: "Vista Panorámica del Campus",
+        desc: "Modelo arquitectónico completo. Gira libremente con el ratón o mueve el deslizador superior para ver cómo el sol proyecta sombras."
+      }
+    ];
+
+    function navigate(idx) {
+      document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      const v = views[idx];
+      document.getElementById('card-title').textContent = v.title;
+      document.getElementById('card-desc').textContent = v.desc;
+
+      new TWEEN.Tween(camera.position).to(v.cam, 1000).easing(TWEEN.Easing.Cubic.Out).start();
+      new TWEEN.Tween(controls.target).to(v.target, 1000).easing(TWEEN.Easing.Cubic.Out).start();
+    }
+
+    // Inicializar iluminación solar
+    updateSunPosition();
+
+    // -------------------------------------------------------------
+    // 7. BUCLE DE RENDER
+    // -------------------------------------------------------------
+    let clock = new THREE.Clock();
+
+    function animate(time) {
+      requestAnimationFrame(animate);
+      TWEEN.update(time);
+      const elapsed = clock.getElapsedTime();
+
+      // Parpadeo suave del LED WiFi verde
+      statusLed.material.opacity = Math.sin(elapsed * 4) > 0 ? 1 : 0.25;
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
