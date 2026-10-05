@@ -283,9 +283,7 @@
       z-index: 15;
     }
 
-    /* ------------------------------------------------------------- */
-    /* RESPONSIVE MEDIA QUERIES (ADAPTACIÓN A CELULAR & TABLET)       */
-    /* ------------------------------------------------------------- */
+    /* RESPONSIVE */
     @media (max-width: 768px) {
       #mobile-toggle-btn { display: block; }
       #hud-panel {
@@ -307,7 +305,6 @@
         transform: translateY(calc(100% - 46px));
         opacity: 0.95;
       }
-      /* Barra deslizante tipo tirador en móvil */
       .sheet-drag-handle {
         width: 44px;
         height: 5px;
@@ -351,7 +348,6 @@
     <h1>Comedor Fotovoltaico</h1>
     <p class="sub">Plano arquitectónico interactivo a escala 1:1 con especificaciones y métricas en tiempo real.</p>
 
-    <!-- CONTROL SOLAR -->
     <div class="solar-slider-box">
       <div class="slider-header">
         <span>☀️ Simulación Solar:</span>
@@ -360,7 +356,6 @@
       <input type="range" id="solar-time" min="7" max="19" step="0.25" value="12.5" oninput="updateSunPosition()">
     </div>
 
-    <!-- BOTONES DE PUNTOS TÉCNICOS -->
     <div class="nav-list">
       <button class="nav-btn" onclick="navigate(0)">☀️ 1. Techo Fotovoltaico <span>1200W</span></button>
       <button class="nav-btn active" onclick="navigate(1)">🔌 2. Estación Carga <span>4AC/8USB</span></button>
@@ -371,7 +366,6 @@
       <button class="nav-btn" onclick="navigate(6)">🔄 Vista 3D <span>360°</span></button>
     </div>
 
-    <!-- FICHA TÉCNICA CON CUADROS / RECUADROS -->
     <div id="detail-card">
       <div id="card-title">Estación de Carga (Panel Frontal)</div>
       <div id="card-desc">Equipada con 4 enchufes de corriente alterna y 8 puertos USB con voltímetro, protección termomagnética y medidor para laptops y celulares.</div>
@@ -388,7 +382,6 @@
       </div>
     </div>
 
-    <!-- ACCIONES RÁPIDAS -->
     <div class="action-row">
       <button class="btn-action" onclick="toggleTour()" id="tour-btn">▶ Recorrido Guiado</button>
       <button class="btn-action" onclick="openPlanModal()">📐 Ver Plano</button>
@@ -398,7 +391,6 @@
   <div id="tip-controls">🖱️ May x MRX</div>
   <canvas id="canvas3d"></canvas>
 
-  <!-- MODAL DE PLANO TÉCNICO ORIGINAL -->
   <div id="plan-modal" onclick="closePlanModal()">
     <button class="close-modal">&times;</button>
     <img src="WhatsApp Image 2026-09-16 at 7.14.54 PM.jpeg" alt="Plano de Diseño">
@@ -423,7 +415,6 @@
       powerPreference: "high-performance"
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    // Limitar pixel ratio a 1.75 para no sobrecalentar teléfonos
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -444,7 +435,6 @@
 
     const sun = new THREE.DirectionalLight(0xfff6e5, 1.45);
     sun.castShadow = true;
-    // Sombras balanceadas a 1024 para velocidad máxima
     sun.shadow.mapSize.width = 1024;
     sun.shadow.mapSize.height = 1024;
     sun.shadow.camera.near = 0.5;
@@ -590,6 +580,36 @@
         c.lineTo(256, i + (Math.random() * 6 - 3));
         c.stroke();
       }
+      return new THREE.CanvasTexture(cv);
+    }
+
+    // TEXTURA DE LETRAS "TIC's" CON TRAZO ROJO
+    function makeTicsTexture() {
+      const cv = document.createElement('canvas');
+      cv.width = 256;
+      cv.height = 512;
+      const ctx = cv.getContext('2d');
+
+      ctx.clearRect(0, 0, cv.width, cv.height);
+
+      ctx.font = '900 82px "Arial Black", Impact, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const letters = ['T', 'I', 'C', "'", 's'];
+      const yPositions = [65, 155, 250, 340, 420];
+
+      letters.forEach((char, i) => {
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 14;
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+        ctx.strokeText(char, 128, yPositions[i]);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(char, 128, yPositions[i]);
+      });
+
       return new THREE.CanvasTexture(cv);
     }
 
@@ -838,6 +858,26 @@
     conduit.position.set(0, 2.45, 0.24);
     comedor.add(conduit);
 
+    // ==========================================
+    // RÓTULOS "TIC's" EN EL MURO / COLUMNA
+    // ==========================================
+    const matTics = new THREE.MeshBasicMaterial({
+      map: makeTicsTexture(),
+      transparent: true,
+      depthWrite: false
+    });
+
+    // 1. Cara frontal donde está el módem (Z+)
+    const ticsFront = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.8), matTics);
+    ticsFront.position.set(0, 1.45, 0.211);
+    comedor.add(ticsFront);
+
+    // 2. Cara lateral derecha donde están los contactos (X+)
+    const ticsRight = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.8), matTics);
+    ticsRight.rotation.y = Math.PI / 2;
+    ticsRight.position.set(0.211, 1.45, 0);
+    comedor.add(ticsRight);
+
     // GABINETE MPPT
     const mpptGroup = new THREE.Group();
     mpptGroup.position.set(-0.23, 1.8, 0);
@@ -1015,7 +1055,6 @@
       document.getElementById('metric-2').textContent = v.m2;
       document.getElementById('lbl-2').textContent = v.l2;
 
-      // En móviles, alejar un 20% la cámara para que el encuadre sea cómodo
       const factor = (window.innerWidth <= 768) ? 1.25 : 1.0;
       const targetCam = {
         x: v.cam.x * factor,
@@ -1027,7 +1066,6 @@
       new TWEEN.Tween(controls.target).to(v.target, 900).easing(TWEEN.Easing.Cubic.Out).start();
     }
 
-    // TOGGLE PANEL EN MÓVILES
     function toggleMobilePanel() {
       const p = document.getElementById('hud-panel');
       p.classList.toggle('collapsed');
@@ -1035,7 +1073,6 @@
       btn.textContent = p.classList.contains('collapsed') ? '▲ Panel' : '▼ Minimizar';
     }
 
-    // TOUR AUTOMÁTICO
     let tourTimer = null;
     function toggleTour() {
       const btn = document.getElementById('tour-btn');
@@ -1053,7 +1090,6 @@
       }
     }
 
-    // MODAL DEL PLANO
     function openPlanModal() { document.getElementById('plan-modal').style.display = 'flex'; }
     function closePlanModal() { document.getElementById('plan-modal').style.display = 'none'; }
 
@@ -1076,7 +1112,6 @@
     }
     animate();
 
-    // RESIZE DINÁMICO EXACTO PARA MÓVILES Y LAPTOPS
     window.addEventListener('resize', () => {
       const w = window.innerWidth;
       const h = window.innerHeight;

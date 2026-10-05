@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Simulador Arquitectónico 3D fotorrealista - Comedor Solar TIC's</title>
+  <style>
+    /* ESTILOS CSS GENERALES Y DE LA INTERFAZ (UI) */
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #05070a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; }
+    
+    #canvas3d { width: 100vw; height: 100vh; display: block; touch-action: none; }
+
+    /* PANEL DE CONTROL LATERAL (HUD) */
+    #hud-panel {
+      position: absolute; top: 20px; left: 20px; width: 340px;
+      background: rgba(10, 15, 25, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); z-index: 20;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .pill-tag { display: inline-block; align-self: flex-start; font-size: 0.7rem; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em; }
+    h1 { font-size: 1.2rem; font-weight: 700; color: #ffffff; line-height: 1.2; }
+    p.sub { font-size: 0.8rem; color: #94a3b8; line-height: 1.4; margin-bottom: 5px; }
+
+    /* CONTROL DESLIZANTE SOLAR */
+    .solar-ctrl { background: rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 12px; border: 1px solid rgba(255, 255, 255, 0.05); }
+    .label-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #e2e8f0; margin-bottom: 8px; font-weight: 600; }
+    .time-val { background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    
+    input[type=range] { width: 100%; height: 6px; -webkit-appearance: none; background: rgba(255,255,255,0.1); border-radius: 3px; outline: none; accent-color: #f59e0b; cursor: pointer; }
+
+    /* BOTONES DE VISTA */
+    .views-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .view-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #cbd5e1; padding: 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: left; }
+    .view-btn:hover { background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.3); color: #fff; }
+    .view-btn.active { background: #0284c7; border-color: #38bdf8; color: #fff; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4); }
+
+    /* INSTRUCCIONES INFERIORES */
+    #help-tip { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); padding: 8px 16px; border-radius: 20px; font-size: 0.75rem; color: #94a3b8; pointer-events: none; z-index: 10; border: 1px solid rgba(255,255,255,0.05); }
+
+    /* RESPONSIVE PARA MÓVILES */
+    @media (max-width: 768px) {
+      #hud-panel { top: auto; bottom: 0; left: 0; width: 100%; border-radius: 20px 20px 0 0; border-left: none; border-right: none; border-bottom: none; padding: 16px; }
+      h1 { font-size: 1.1rem; }
+      .view-btn { padding: 8px; font-size: 0.7rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LIENZO 3D -->
+  <canvas id="canvas3d"></canvas>
+
+  <!-- INTERFAZ DE USUARIO (UI) -->
+  <div id="hud-panel">
+    <span class="pill-tag">Renderizado Realista WebGL</span>
+    <h1>Estación Solar TIC's</h1>
+    <p class="sub">Módulo de estudio fotorrealista con iluminación global, sombras suaves y materiales físicos (PBR).</p>
+
+    <div class="solar-ctrl">
+      <div class="label-row">
+        <span>☀️ Posición del Sol (Hora)</span>
+        <span class="time-val" id="time-display">12:00</span>
+      </div>
+      <!-- Control de hora: 7:00 a 19:00 -->
+      <input type="range" id="solar-time" min="7" max="19" step="0.1" value="12">
+    </div>
+
+    <div class="views-grid">
+      <button class="view-btn active" onclick="setCameraView(0)">🎬 Vista General</button>
+      <button class="view-btn" onclick="setCameraView(1)">🔍 Detalle Paneles</button>
+      <button class="view-btn" onclick="setCameraView(2)">🔌 Estación Carga</button>
+      <button class="view-btn" onclick="setCameraView(3)">🏀 Cancha/Entorno</button>
+    </div>
+  </div>
+
+  <div id="help-tip">Girar: Clic Izq. | Zoom: Rueda | Pan: Clic Der.</div>
+
+  <!-- LIBRERÍAS NECESARIAS (Three.js y módulos) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- TWEEN.js para animaciones suaves de cámara -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+
+  <script>
+    // -------------------------------------------------------------
+    // CONFIGURACIÓN BÁSICA DEL MOTOR 3D (Three.js)
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('canvas3d');
+    const scene = new THREE.Scene();
+    // Niebla sutil para dar profundidad al fondo
+    scene.fog = new THREE.Fog(0xd8e7f2, 20, 50);
+
+    // Cámara con perspectiva natural
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    
+    // CONFIGURACIÓN DEL RENDERIZADOR PARA MÁXIMO REALISMO
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvas,
+      antialias: true, // Suavizado de bordes
+      powerPreference: "high-performance" // Solicitar GPU de alto rendimiento
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Ajuste para pantallas Retina/High-DPI
+    
+    // --- CLAVE PARA EL REALISMO: ILUMINACIÓN FÍSICA Y MAPEO DE TONOS ---
+    renderer.outputEncoding = THREE.sRGBEncoding; // Gamma correction correcta
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; // Mapeo de tonos cinematográfico (fotorrealista)
+    renderer.toneMappingExposure = 1.2; // Exposición global
+    
+    // Habilitar sombras suaves
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Tipo de sombra difuminada
+
+    // Controles de órbita para interactuar con la cámara
+    const controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true; // Inercia para movimiento suave
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 2;
+    controls.maxDistance = 40;
+    controls.target.set(0, 1, 0); // Punto central donde mira la cámara
+
+    // -------------------------------------------------------------
+    // SISTEMA DE ILUMINACIÓN DINÁMICA (SOL)
+    // -------------------------------------------------------------
+    
+    // Luz ambiental suave (aporta color base a las sombras)
+    const ambientLight = new THREE.AmbientLight(0xdbe9f5, 0.4);
+    scene.add(ambientLight);
+
+    // Luz hemisférica (simula el rebote de luz del cielo y suelo)
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
+    scene.add(hemiLight);
+
+    // LUZ DIRECTA DEL SOL (Principal fuente de luz y sombras)
+    const sunLight = new THREE.DirectionalLight(0xfff5e1, 1.5);
+    sunLight.castShadow = true; // El sol proyecta sombras
+    
+    // Configuración de resolución de sombras (Clave para que no se vean pixeladas)
+    sunLight.shadow.mapSize.width = 2048; // Resolución alta
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 1;
+    sunLight.shadow.camera.far = 50;
+    // Área que cubren las sombras (ortográfica)
+    const d = 15;
+    sunLight.shadow.camera.left = -d;
+    sunLight.shadow.camera.right = d;
+    sunLight.shadow.camera.top = d;
+    sunLight.shadow.camera.bottom = -d;
+    sunLight.shadow.bias = -0.0005; // Evita artefactos visuales en superficies planas
+    scene.add(sunLight);
+
+    // Representación visual del sol (esfera brillante)
+    const sunGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffffee });
+    const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sunMesh);
+
+    // Función para actualizar la posición del sol y color del cielo según la hora
+    function updateSolarSystem() {
+      const time = parseFloat(document.getElementById('solar-time').value);
+      
+      // Actualizar texto de UI
+      const hours = Math.floor(time);
+      const minutes = Math.floor((time % 1) * 60);
+      document.getElementById('time-display').textContent = 
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+      // Calcular ángulo del sol (de Este a Oeste)
+      // En radianes: 7h = PI, 13h (cenit) = PI/2, 19h = 0
+      const angle = Math.PI * (1 - (time - 7) / 12);
+      
+      const radius = 30; // Distancia del sol
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius; // Altura
+      const z = -5; // Ligera inclinación hacia el fondo
+
+      sunLight.position.set(x, y, z);
+      sunMesh.position.set(x, y, z);
+
+      // Cambiar dinámicamente el color del fondo y niebla (amanecer/día/atardecer)
+      let skyColor, groundColor, intensity;
+      
+      if (time < 9) { // Amanecer cálido
+        const t = (time - 7) / 2;
+        skyColor = new THREE.Color().lerpColors(new THREE.Color(0xffa573), new THREE.Color(0x87ceeb), t);
+        intensity = 0.8 + t * 0.7;
+      } else if (time > 17) { // Atardecer cálido
+        const t = (time - 17) / 2;
+        skyColor = new THREE.Color().lerpColors(new THREE.Color(0x87ceeb), new THREE.Color(0xff7043), t);
+        intensity = 1.5 - t * 0.9;
+      } else { // Mediodía claro
+        skyColor = new THREE.Color(0x87ceeb);
+        intensity = 1.5;
+      }
+
+      scene.background = skyColor;
+      scene.fog.color = skyColor;
+      sunLight.intensity = intensity;
+      // Hacer el sol invisible si está muy bajo (noche simulada)
+      sunMesh.visible = y > 0.5;
+    }
+
+    // Escuchar cambios en el slider
+    document.getElementById('solar-time').addEventListener('input', updateSolarSystem);
+
+    // -------------------------------------------------------------
+    // CREACIÓN DE MATERIALES FÍSICOS (PBR) PARA REALISMO
+    // -------------------------------------------------------------
+    // Usamos MeshStandardMaterial para que reaccionen a la luz de forma realista
+    
+    // Función auxiliar para crear texturas procedimentales sutiles (evita superficies lisas plásticas)
+    function createNoiseTexture(color1, color2, size=64) {
+      const canvasTex = document.createElement('canvas');
+      canvasTex.width = size; canvasTex.height = size;
+      const ctx = canvasTex.getContext('2d');
+      for (let i=0; i<size; i++) {
+        for (let j=0; j<size; j++) {
+          ctx.fillStyle = Math.random() > 0.5 ? color1 : color2;
+          ctx.fillRect(i, j, 1, 1);
+        }
+      }
+      const tex = new THREE.CanvasTexture(canvasTex);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // 1. Metal Negro ESTRUCTURA (mate, rugoso)
+    const matStructure = new THREE.MeshStandardMaterial({
+      color: 0x111111,
+      metalness: 0.8,
+      roughness: 0.6
+    });
+
+    // 2. Concreto COLUMNA (claro, muy rugoso)
+    const concreteNoise = createNoiseTexture('#dddddd', '#ffffff');
+    concreteNoise.repeat.set(4, 4);
+    const matConcrete = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      map: concreteNoise,
+      roughness: 0.9,
+      metalness: 0.0
+    });
+
+    // 3. Madera MESAS/BANCAS (veteado simulado cálido)
+    const woodTex = createNoiseTexture('#b57e4a', '#c69563');
+    woodTex.repeat.set(2, 10);
+    const matWood = new THREE.MeshStandardMaterial({
+      map: woodTex,
+      roughness: 0.7,
+      metalness: 0.0
+    });
+
+    // 4. Vidrio PANELES SOLARES (oscuro, muy reflectante, liso)
+    const matSolarGlass = new THREE.MeshStandardMaterial({
+      color: 0x050a15,
+      metalness: 0.9,
+      roughness: 0.1, // Muy liso para reflejos nítidos
+      envMapIntensity: 1.0
+    });
+
+    // 5. Suelo PAVIMENTO (gris, rugoso)
+    const paveNoise = createNoiseTexture('#999999', '#aaaaaa');
+    paveNoise.repeat.set(50, 50);
+    const matGround = new THREE.MeshStandardMaterial({
+      color: 0xaaaaaa,
+      map: paveNoise,
+      roughness: 0.8,
+      metalness: 0.0
+    });
+
+    // Materiales para entorno (Cancha y Edificio)
+    const matCourt = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.9 }); // Verde
+    const matBuilding = new THREE.MeshStandardMaterial({ color: 0xdbe9f5, roughness: 0.7 }); // Muro claro
+
+    // -------------------------------------------------------------
+    // CONSTRUCCIÓN DE LA ESCENA (GEOMETRÍA)
+    // -------------------------------------------------------------
+    
+    // Grupo principal para contener el comedor
+    const diningArea = new THREE.Group();
+    scene.add(diningArea);
+
+    // --- 1. SUELO GENERAL Y PLATAFORMA ---
+    const groundGeo = new THREE.PlaneGeometry(100, 100);
+    const ground = new THREE.Mesh(groundGeo, matGround);
+    ground.rotation.x = -Math.PI / 2; // Tumbado en el suelo
+    ground.receiveShadow = true; // Recibe sombras del sol
+    scene.add(ground);
+
+    const platformGeo = new THREE.BoxGeometry(8, 0.1, 5);
+    const platform = new THREE.Mesh(platformGeo, matConcrete);
+    platform.position.y = 0.05;
+    platform.receiveShadow = true;
+    platform.castShadow = true;
+    diningArea.add(platform);
+
+    // --- 2. ESTRUCTURA PORTANTE (Pilares y Vigas) ---
+    function createBeam(w, h, d, x, y, z, rx=0) {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const mesh = new THREE.Mesh(geo, matStructure);
+      mesh.position.set(x, y, z);
+      mesh.rotation.x = rx;
+      mesh.castShadow = true; // Proyecta sombra
+      mesh.receiveShadow = true;
+      diningArea.add(mesh);
+    }
+
+    // Pilares principales (4)
+    const pX = 3.2, pZ = 1.8, ph = 2.4;
+    createBeam(0.15, ph, 0.15,  pX, ph/2,  pZ);
+    createBeam(0.15, ph, 0.15, -pX, ph/2,  pZ);
+    createBeam(0.15, ph, 0.15,  pX, ph/ ph/2, -pZ);
+    createBeam(0.15, ph, 0.15, -pX, ph/2, -pZ);
+
+    // Vigas perimetrales superiores
+    createBeam(6.55, 0.15, 0.1, 0, ph, pZ);
+    createBeam(6.55, 0.15, 0.1, 0, ph, -pZ);
+    createBeam(0.1, 0.15, 3.75,  pX, ph, 0);
+    createBeam(0.1, 0.15, 3.75, -pX, ph, 0);
+
+    // Estructura del techo a dos aguas (cerchas simples)
+    createBeam(6.55, 0.08, 0.08, 0, ph + 0.4, 0); // Viga cumbrera central
+    // Vigas inclinadas perfiles
+    const angleTecho = 15 * Math.PI / 180; // 15 grados de inclinación
+    for(let zOff of [-pZ, 0, pZ]) {
+       // Larguero inclinado frontal
+       createBeam(0.06, 0.06, 2.1, 0, ph + 0.22, 1, angleTecho);
+       // Larguero inclinado trasero
+       createBeam(0.06, 0.06, 2.1, 0, ph + 0.22, -1, -angleTecho);
+    }
+
+    // --- 3. PANELES SOLARES (TECHO) ---
+    const panelAreaGeo = new THREE.PlaneGeometry(6.6, 4.2);
+    const panelsArea = new THREE.Group();
+    panelsArea.position.y = ph + 0.25;
+    diningArea.add(panelsArea);
+
+    // Ala frontal del techo
+    const panelsFrontGeo = new THREE.PlaneGeometry(6.6, 2.1);
+    const panelsFront = new THREE.Mesh(panelsFrontGeo, matSolarGlass);
+    panelsFront.rotation.x = -Math.PI/2 - angleTecho;
+    panelsFront.position.z = 1;
+    panelsFront.castShadow = true;
+    panelsArea.add(panelsFront);
+
+    // Ala trasera del techo
+    const panelsBack = new THREE.Mesh(panelsFrontGeo, matSolarGlass);
+    panelsBack.rotation.x = -Math.PI/2 + angleTecho;
+    panelsBack.position.z = -1;
+    panelsBack.castShadow = true;
+    panelsArea.add(panelsBack);
+
+    // Subdividir visualmente los paneles (líneas de cuadrícula)
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.5 });
+    
+    function addGridToPanel(w, h, rows, cols, parentMesh) {
+       const group = new THREE.Group();
+       // Líneas verticales
+       for(let i=1; i<cols; i++) {
+          const points = [new THREE.Vector3(-w/2 + i*w/cols, -h/2, 0.01), new THREE.Vector3(-w/2 + i*w/cols, h/2, 0.01)];
+          const geo = new THREE.BufferGeometry().setFromPoints(points);
+          group.add(new THREE.Line(geo, lineMat));
+       }
+       // Líneas horizontales
+       for(let i=1; i<rows; i++) {
+          const points = [new THREE.Vector3(-w/2, -h/2 + i*h/rows, 0.01), new THREE.Vector3(w/2, -h/2 + i*h/rows, 0.01)];
+          const geo = new THREE.BufferGeometry().setFromPoints(points);
+          group.add(new THREE.Line(geo, lineMat));
+       }
+       parentMesh.add(group);
+    }
+    // Asumimos matriz de 4x8 paneles por ala
+    addGridToPanel(6.6, 2.1, 4, 8, panelsFront);
+    addGridToPanel(6.6, 2.1, 4, 8, panelsBack);
+
+
+    // --- 4. MOBILIARIO (Mesas y Bancas) ---
+    // Simbología: w=ancho(X), h=alto(Y), d=profundo(Z)
+    
+    // Función para crear conjunto mesa+bancas
+    function createTableSet(xOff) {
+      const group = new THREE.Group();
+      group.position.x = xOff;
+      group.position.y = 0.1; // Sobre la plataforma
+
+      // Mesa
+      const tableTopGeo = new THREE.BoxGeometry(2.5, 0.06, 0.9);
+      const tableTop = new THREE.Mesh(tableTopGeo, matWood);
+      tableTop.position.y = 0.72;
+      tableTop.castShadow = true; tableTop.receiveShadow = true;
+      group.add(tableTop);
+      
+      // Patas mesa (metal)
+      const legGeo = new THREE.BoxGeometry(0.1, 0.72, 0.7);
+      const legs = new THREE.Mesh(legGeo, matStructure);
+      legs.position.set(0, 0.36, 0);
+      legs.castShadow = true; legs.receiveShadow = true;
+      group.add(legs);
+
+      // Bancas (2 por mesa)
+      const benchTopGeo = new THREE.BoxGeometry(2.5, 0.05, 0.3);
+      for(let z of [-0.7, 0.7]) {
+        const bench = new THREE.Mesh(benchTopGeo, matWood);
+        bench.position.y = 0.45;
+        bench.position.z = z;
+        bench.castShadow = true; bench.receiveShadow = true;
+        group.add(bench);
+        
+        // Soporte banca
+        const bSupGeo = new THREE.BoxGeometry(2.2, 0.45, 0.1);
+        const bSup = new THREE.Mesh(bSupGeo, matStructure);
+        bSup.position.set(0, 0.225, z);
+        bSup.castShadow = true;
+        group.add(bSup);
+      }
+      
+      diningArea.add(group);
+    }
+
+    createTableSet(-1.8); // Conjunto izquierdo
+    createTableSet( 1.8); // Conjunto derecho
+
+
+    // --- 5. COLUMNA CENTRAL DE CONCRETO Y ESTACIÓN DE CARGA (TIC's) ---
+    const colCentralGeo = new THREE.BoxGeometry(0.7, ph, 0.7);
+    const colCentral = new THREE.Mesh(colCentralGeo, matConcrete);
+    colCentral.position.y = ph/2 + 0.1;
+    colCentral.castShadow = true;
+    colCentral.receiveShadow = true;
+    diningArea.add(colCentral);
+
+    // Texto simulado "TIC's" (usando Canvas para textura)
+    const canvasText = document.createElement('canvas');
+    canvasText.width = 256; canvasText.height = 128;
+    const ctxT = canvasText.getContext('2d');
+    ctxT.fillStyle = '#ffffff00'; ctxT.fillRect(0,0,256,128); // Fondo transparente
+    ctxT.fillStyle = '#333333'; ctxT.font = 'bold 80px Arial'; ctxT.textAlign = 'center'; ctxT.textBaseline = 'middle';
+    ctxT.fillText("TIC's", 128, 64);
+    
+    const textTex = new THREE.CanvasTexture(canvasText);
+    const textMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true });
+    const textPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.3), textMat);
+    // Pegado a la cara frontal de la columna
+    textPlane.position.set(0, ph - 0.4, 0.351); 
+    diningArea.add(textPlane);
+
+    // Detalles estación de carga (enchufes USB simulados)
+    const cargaGroup = new THREE.Group();
+    cargaGroup.position.set(0, 1.2, 0.35);
+    diningArea.add(cargaGroup);
+
+    const plateGeo = new THREE.PlaneGeometry(0.5, 0.8);
+    const plateMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3 });
+    const plate = new THREE.Mesh(plateGeo, plateMat);
+    cargaGroup.add(plate);
+
+    const socketGeo = new THREE.BoxGeometry(0.04, 0.08, 0.02);
+    const socketMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+    // Crear rejilla de tomas
+    for(let y=0; y<4; y++) {
+      for(let x=0; x<3; x++) {
+        const socket = new THREE.Mesh(socketGeo, socketMat);
+        socket.position.set(-0.16 + x*0.16, 0.28 - y*0.18, 0.01);
+        cargaGroup.add(socket);
+      }
+    }
+
+
+    // -------------------------------------------------------------
+    // ENTORNO (CONTEXTO ARQUITECTÓNICO)
+    // -------------------------------------------------------------
+    
+    // --- 1. Edificio de fondo (Student Union) ---
+    const buildGeo = new THREE.BoxGeometry(20, 8, 50);
+    const building = new THREE.Mesh(buildGeo, matBuilding);
+    building.position.set(0, 4, -30); // Lejos detrás
+    building.castShadow = true;
+    building.receiveShadow = true;
+    scene.add(building);
+    
+    // Ventanas simples simuladas con planos oscuros
+    const winMat = new THREE.MeshStandardMaterial({ color: 0x1a253a, metalness: 0.8, roughness: 0.2 });
+    const winGeo = new THREE.PlaneGeometry(1.2, 2);
+    for(let f=0; f<3; f++) { // Pisos
+      for(let c=0; c<10; c++) { // Columnas
+        const win = new THREE.Mesh(winGeo, winMat);
+        win.position.set(-8 + c*1.8, 2 + f*2.5, -24.99);
+        scene.add(win);
+      }
+    }
+
+    // --- 2. Cancha de Basketball (Izquierda) ---
+    const courtGroup = new THREE.Group();
+    courtGroup.position.set(-15, 0.01, 5);
+    scene.add(courtGroup);
+
+    const courtGeo = new THREE.PlaneGeometry(12, 20);
+    const courtFloor = new THREE.Mesh(courtGeo, matCourt);
+    courtFloor.rotation.x = -Math.PI / 2;
+    courtFloor.receiveShadow = true;
+    courtGroup.add(courtFloor);
+    
+    // Líneas de cancha sutiles
+    const lineCanchaMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+    const pointsC = [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(6, 0, 0)]; // Línea central
+    const geoC = new THREE.BufferGeometry().setFromPoints(pointsC);
+    const lineaC = new THREE.Line(geoC, lineCanchaMat);
+    lineaC.position.y = 0.01;
+    courtGroup.add(lineaC);
+
+    // Canasta (poste)
+    createBeam(0.1, 3.5, 0.1, -15, 1.75, 14); // Poste detrás de la cancha
+
+    // --- 3. Vegetación (Árboles simplificados) ---
+    // Clave para realismo: aportan sombras orgánicas proyectadas
+    function createTree(x, z, scale=1) {
+      const tree = new THREE.Group();
+      tree.position.set(x, 0, z);
+      tree.scale.set(scale, scale, scale);
+      
+      const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2.5, 8);
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.y = 1.25;
+      trunk.castShadow = true; trunk.receiveShadow = true;
+      tree.add(trunk);
+      
+      const foliageGeo = new THREE.DodecahedronGeometry(2, 1);
+      const foliageMat = new THREE.MeshStandardMaterial({ color: 0x388e3c, roughness: 0.8 });
+      const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+      foliage.position.y = 4;
+      foliage.castShadow = true; foliage.receiveShadow = true;
+      tree.add(foliage);
+      
+      scene.add(tree);
+    }
+    
+    // Colocar árboles estratégicamente para sombras
+    createTree(-8, -5, 1.2); // Atrás izquierda
+    createTree( 9, -2, 1.1); // Atrás derecha
+    createTree(-5, 10, 0.9); // Delante izquierda
+
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE CÁMARA Y VISTAS (UI)
+    // -------------------------------------------------------------
+    
+    // Definición de puntos de vista (posición cámara y target)
+    const cameraViews = [
+      { pos: { x: 8, y: 5, z: 12 }, target: { x: 0, y: 1.5, z: 0 } },  // 0: General
+      { pos: { x: 0, y: 6, z: 1 },  target: { x: 0, y: 3, z: 0 } },    // 1: Techo
+      { pos: { x: 0, y: 1.2, z: 2.5 }, target: { x: 0, y: 1.2, z: 0 } }, // 2: Carga
+      { pos: { x: -18, y: 8, z: 18 }, target: { x: -10, y: 1, z: 5 } }  // 3: Cancha
+    ];
+
+    function setCameraView(index) {
+      // Actualizar estado de botones en UI
+      document.querySelectorAll('.view-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+      });
+
+      const view = cameraViews[index];
+      
+      // Animar posición de cámara (TWEEN)
+      new TWEEN.Tween(camera.position)
+        .to(view.pos, 1000)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+        
+      // Animar punto de mira (controls.target)
+      new TWEEN.Tween(controls.target)
+        .to(view.target, 1000)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+    }
+
+    // Establecer vista inicial por defecto
+    camera.position.set(cameraViews[0].pos.x, cameraViews[0].pos.y, cameraViews[0].pos.z);
+    controls.target.set(cameraViews[0].target.x, cameraViews[0].target.y, cameraViews[0].target.z);
+
+
+    // -------------------------------------------------------------
+    // BUCLE DE ANIMACIÓN Y RENDERIZADO
+    // -------------------------------------------------------------
+    
+    // Inicializar sistema solar
+    updateSolarSystem();
+
+    function animate(time) {
+      requestAnimationFrame(animate);
+      
+      // Actualizar animaciones TWEEN
+      TWEEN.update(time);
+      
+      // Actualizar controles de cámara (amortiguación)
+      controls.update();
+      
+      // Renderizar la escena
+      renderer.render(scene, camera);
+    }
+    
+    // Arrancar bucle
+    animate();
+
+    // -------------------------------------------------------------
+    // MANEJO DE REDIMENSIONADO DE VENTANA
+    // -------------------------------------------------------------
+    window.addEventListener('resize', onWindowResize, false);
+    
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+  </script>
+</body>
+</html>
